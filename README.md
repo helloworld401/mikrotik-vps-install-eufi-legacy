@@ -2,7 +2,7 @@
 
 Инструкция для установки **Cloud Hosted Router (CHR)** на VPS/облачный сервер с Linux (Debian/Ubuntu и аналоги).
 
-Подходит, если провайдер отдаёт сервер с **eth0**, статическим публичным IP и шлюзом по умолчанию.
+Подходит, если провайдер отдаёт VPS со **статическим публичным IP** и шлюзом по умолчанию (один сетевой интерфейс к интернету).
 
 > **Внимание:** команды `dd` перезаписывают **весь системный диск** (см. ниже, как его определить). Убедитесь, что работаете на нужном сервере и с нужным устройством.
 
@@ -47,17 +47,38 @@ ip r
 
 ```text
 # ip a
-inet YOUR_PUBLIC_IP/32 scope global eth0
+inet YOUR_PUBLIC_IP/32 scope global YOUR_LINUX_IF
 
 # ip r
-default via YOUR_GATEWAY dev eth0
+default via YOUR_GATEWAY dev YOUR_LINUX_IF
 ```
 
-| Параметр | Откуда взять | Пример плейсхолдера |
-|----------|--------------|---------------------|
-| `YOUR_PUBLIC_IP` | `ip a` → eth0 | `203.0.113.10` |
-| `YOUR_GATEWAY` | `ip r` → default via | `172.31.1.1` |
-| `eth0` | имя интерфейса в rescue | обычно `eth0` |
+| Параметр | Откуда взять | Пример |
+|----------|--------------|--------|
+| `YOUR_PUBLIC_IP` | `ip a` — адрес на интерфейсе с default route | `203.0.113.10` |
+| `YOUR_GATEWAY` | `ip r` → `default via` | `172.31.1.1` |
+| `YOUR_LINUX_IF` | `ip a` / `ip r` — имя в **Linux** (rescue) | см. ниже |
+
+### Имя интерфейса (не везде `eth0`!)
+
+В **Linux** (rescue/SSH) имя зависит от провайдера и драйвера:
+
+| Имя | Где встречается |
+|-----|-----------------|
+| `eth0` | классика, часть KVM |
+| `ens3`, `ens18` | systemd predictable names (Proxmox, OVH, …) |
+| `enp0s3`, `eno1` | PCI-имена |
+| `enX0` | некоторые облака (Azure-подобные) |
+
+Смотрите вывод `ip a` — интерфейс с **вашим публичным IP** и через который идёт default route.
+
+> **Важно для `autorun.scr`:** в Linux интерфейс может называться `ens3`, а в **RouterOS CHR** первый NIC — обычно **`ether1`**, не `eth0` и не `ens3`.  
+> В `autorun.scr` указывайте **`YOUR_ROS_IF`** — чаще всего `ether1`. Если после установки сети нет — зайдите в консоль провайдера и проверьте `/interface print`.
+
+| Контекст | Плейсхолдер | Типичное значение на CHR |
+|----------|-------------|--------------------------|
+| Linux (`ip a`) | `YOUR_LINUX_IF` | `eth0`, `ens3`, … |
+| RouterOS (`autorun.scr`) | `YOUR_ROS_IF` | **`ether1`** |
 
 ### Определить системный диск (не всегда `/dev/sda`!)
 
@@ -129,20 +150,20 @@ mount -o loop,offset=33571840 chr-uefi-fat.raw /mnt
 nano /mnt/rw/autorun.scr
 ```
 
-Содержимое (подставьте **свои** IP и шлюз):
+Содержимое (подставьте **свои** IP, шлюз и интерфейс **RouterOS**):
 
 ```routeros
 /ip address
-add address=YOUR_PUBLIC_IP/32 interface=eth0 network=YOUR_PUBLIC_IP
+add address=YOUR_PUBLIC_IP/32 interface=YOUR_ROS_IF network=YOUR_PUBLIC_IP
 /ip route
 add gateway=YOUR_GATEWAY
 ```
 
-Пример:
+Пример (на CHR первый интерфейс чаще **`ether1`**):
 
 ```routeros
 /ip address
-add address=203.0.113.10/32 interface=eth0 network=203.0.113.10
+add address=203.0.113.10/32 interface=ether1 network=203.0.113.10
 /ip route
 add gateway=172.31.1.1
 ```
@@ -232,11 +253,25 @@ install
 
 Нажмите **Start trial** и выберите уровень **P1** или **P10** (зависит от лимитов CHR у MikroTik на момент активации).
 
-### Что важно знать про лицензию
+### Что важно знать про лицензию («MikroTik для бедных»)
 
-- После окончания trial **лицензия сохраняется на этом CHR** и продолжает работать **без ограничения по времени** для уже активированного уровня (P1/P10).
-- Это практичный способ получить полноценный CHR на своём VPS без покупки perpetual license — условно «MikroTik для тех, кто поднимает свой роутер на VPS».
-- **Ограничение:** после активации trial на таком CHR **нельзя обновлять RouterOS** — прошивка фиксируется на версии, которая была **на момент активации лицензии**. Поэтому сначала **Check for updates**, потом **Start trial**.
+По правилам MikroTik для CHR:
+
+- **60 дней** — пробная версия с **полным доступом** к функционалу выбранного уровня (P1 / P10).
+- **После окончания trial**, если **платную лицензию не покупали**, CHR **продолжает работать** на том же уровне — маршрутизация, firewall, VPN и остальное **не отключаются**.
+- **Единственное жёсткое ограничение** без покупки: **нельзя обновлять RouterOS** (ни во время trial после привязки, ни после его окончания без perpetual license).
+
+Практический итог для VPS:
+
+| Этап | Что получаете |
+|------|----------------|
+| Trial 60 дней | Полный CHR бесплатно |
+| После trial без покупки | CHR **работает дальше**, но прошивка **заморожена** |
+| Покупка perpetual | Можно снова обновляться |
+
+Это удобный способ поднять **полноценный MikroTik на своём VPS** без perpetual license — условно **«MikroTik для бедных»**: один раз активировали trial, обновили прошивку **до** `Start trial`, дальше пользуетесь годами на фиксированной версии.
+
+> **Порядок:** сначала **Quick Set → Check for updates** (последняя stable), **потом** **Start trial** — иначе останетесь на старой прошивке из образа навсегда.
 
 > Не публикуйте и не коммитьте в git свои логин/пароль MikroTik — только в Winbox/CLI на роутере.
 
@@ -287,7 +322,7 @@ set winbox address=YOUR_LAN_SUBNET,YOUR_OFFICE_IP/32
 
 | Проблема | Что проверить |
 |----------|----------------|
-| После reboot нет сети | `autorun.scr`: верные `YOUR_PUBLIC_IP/32` и `YOUR_GATEWAY`; имя интерфейса `eth0` |
+| После reboot нет сети | `autorun.scr`: IP, gateway; **`YOUR_ROS_IF`** (часто `ether1`, не имя из Linux) |
 | VPS не грузится после dd | Неверный `YOUR_DISK` или UEFI/Legacy — `lsblk` перед dd; другой образ |
 | Не монтируется образ | Пересчитать `offset` через `fdisk -lu` |
 | Winbox не подключается | Firewall провайдера, порт 8291; временно `/ip service set winbox disabled=no` |
@@ -300,7 +335,7 @@ set winbox address=YOUR_LAN_SUBNET,YOUR_OFFICE_IP/32
 
 Guide for installing **Cloud Hosted Router (CHR)** on a VPS with Linux (Debian/Ubuntu, etc.).
 
-Works when the provider gives you **eth0**, a static public IP, and a default gateway.
+Works when the provider gives you a VPS with a **static public IP** and default gateway (single NIC to the internet).
 
 > **Warning:** `dd` overwrites the **entire system disk** (see below how to identify it). Confirm server and device before running.
 
@@ -345,17 +380,38 @@ Example output (use **your** values):
 
 ```text
 # ip a
-inet YOUR_PUBLIC_IP/32 scope global eth0
+inet YOUR_PUBLIC_IP/32 scope global YOUR_LINUX_IF
 
 # ip r
-default via YOUR_GATEWAY dev eth0
+default via YOUR_GATEWAY dev YOUR_LINUX_IF
 ```
 
-| Parameter | Source | Placeholder example |
-|-----------|--------|---------------------|
-| `YOUR_PUBLIC_IP` | `ip a` → eth0 | `203.0.113.10` |
-| `YOUR_GATEWAY` | `ip r` → default via | `172.31.1.1` |
-| `eth0` | interface name in rescue | usually `eth0` |
+| Parameter | Source | Example |
+|-----------|--------|---------|
+| `YOUR_PUBLIC_IP` | `ip a` — on interface with default route | `203.0.113.10` |
+| `YOUR_GATEWAY` | `ip r` → `default via` | `172.31.1.1` |
+| `YOUR_LINUX_IF` | `ip a` / `ip r` — name in **Linux** (rescue) | see below |
+
+### Interface name (not always `eth0`!)
+
+In **Linux** (rescue/SSH), naming depends on provider and driver:
+
+| Name | Common on |
+|------|-----------|
+| `eth0` | classic VPS, some KVM |
+| `ens3`, `ens18` | predictable names (Proxmox, OVH, …) |
+| `enp0s3`, `eno1` | PCI-based names |
+| `enX0` | some clouds |
+
+Use `ip a` — the interface with **your public IP** and the default route.
+
+> **Important for `autorun.scr`:** Linux may show `ens3`, but **RouterOS CHR** first NIC is usually **`ether1`**, not `eth0` or `ens3`.  
+> Use **`YOUR_ROS_IF`** in `autorun.scr` — typically `ether1`. If no network after install, use provider console and run `/interface print`.
+
+| Context | Placeholder | Typical on CHR |
+|---------|-------------|----------------|
+| Linux (`ip a`) | `YOUR_LINUX_IF` | `eth0`, `ens3`, … |
+| RouterOS (`autorun.scr`) | `YOUR_ROS_IF` | **`ether1`** |
 
 ### Find the system disk (not always `/dev/sda`!)
 
@@ -431,9 +487,18 @@ Content (replace with **your** IP and gateway):
 
 ```routeros
 /ip address
-add address=YOUR_PUBLIC_IP/32 interface=eth0 network=YOUR_PUBLIC_IP
+add address=YOUR_PUBLIC_IP/32 interface=YOUR_ROS_IF network=YOUR_PUBLIC_IP
 /ip route
 add gateway=YOUR_GATEWAY
+```
+
+Example (on CHR first interface is usually **`ether1`**):
+
+```routeros
+/ip address
+add address=203.0.113.10/32 interface=ether1 network=203.0.113.10
+/ip route
+add gateway=172.31.1.1
 ```
 
 ### 5. Unmount and write to disk
@@ -521,11 +586,25 @@ Enter **your** MikroTik account credentials ([mikrotik.com](https://mikrotik.com
 
 Click **Start trial** and choose **P1** or **P10**.
 
-### License notes
+### License notes (“budget MikroTik”)
 
-- After the trial ends, the **license remains on this CHR** and keeps working **without a time limit** for the activated tier (P1/P10).
-- Practical way to run a full CHR on your own VPS without buying a perpetual license.
-- **Limitation:** after trial activation you **cannot upgrade RouterOS** — firmware is locked to the version that was running **at license activation**. Run **Check for updates** first, then **Start trial**.
+MikroTik CHR licensing in practice:
+
+- **60 days** — trial with **full access** to the selected tier (P1 / P10).
+- **After trial ends**, if you **did not buy** a perpetual license, CHR **keeps running** at that tier — routing, firewall, VPN, etc. **stay enabled**.
+- **Main limitation** without purchase: **no RouterOS upgrades** (during trial after activation, and after trial without a paid license).
+
+Practical outcome on a VPS:
+
+| Stage | What you get |
+|-------|----------------|
+| 60-day trial | Full CHR for free |
+| After trial, no purchase | CHR **still works**, firmware **frozen** |
+| Perpetual license purchase | Upgrades allowed again |
+
+A practical way to run a **full MikroTik on your own VPS** without buying perpetual — **“budget MikroTik”**: activate trial once, upgrade firmware **before** `Start trial`, then use it for years on a fixed version.
+
+> **Order matters:** **Quick Set → Check for updates** first (latest stable), **then** **Start trial** — otherwise you stay on the old image version forever.
 
 > Never commit or publish your MikroTik login/password — enter only in Winbox on the router.
 
@@ -568,7 +647,7 @@ Log-based brute-force ban — see [CHR_MIKROTIK_FAIL2BAN.md](./CHR_MIKROTIK_FAIL
 
 | Issue | Check |
 |-------|--------|
-| No network after reboot | `autorun.scr`: correct IP/gateway; interface `eth0` |
+| No network after reboot | `autorun.scr`: IP, gateway; **`YOUR_ROS_IF`** (often `ether1`, not the Linux name) |
 | VPS won't boot after dd | Wrong `YOUR_DISK` or UEFI/Legacy — run `lsblk` before dd; try other image |
 | Mount fails | Recalculate `offset` with `fdisk -lu` |
 | Winbox won't connect | Provider firewall, port 8291 |
