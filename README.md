@@ -4,7 +4,7 @@
 
 Подходит, если провайдер отдаёт сервер с **eth0**, статическим публичным IP и шлюзом по умолчанию.
 
-> **Внимание:** команды `dd` перезаписывают диск (`/dev/sda`). Убедитесь, что работаете на нужном сервере и с нужным диском.
+> **Внимание:** команды `dd` перезаписывают **весь системный диск** (см. ниже, как его определить). Убедитесь, что работаете на нужном сервере и с нужным устройством.
 
 ---
 
@@ -58,6 +58,44 @@ default via YOUR_GATEWAY dev eth0
 | `YOUR_PUBLIC_IP` | `ip a` → eth0 | `203.0.113.10` |
 | `YOUR_GATEWAY` | `ip r` → default via | `172.31.1.1` |
 | `eth0` | имя интерфейса в rescue | обычно `eth0` |
+
+### Определить системный диск (не всегда `/dev/sda`!)
+
+Имя диска **зависит от провайдера и типа виртуализации**:
+
+| Устройство | Где встречается |
+|------------|-----------------|
+| `/dev/sda` | Классические VPS, часть KVM |
+| `/dev/vda` | VirtIO (KVM, Proxmox, многие облака) |
+| `/dev/nvme0n1` | NVMe-диски |
+| `/dev/xvda` | Старый Xen |
+
+Перед `dd` **обязательно** проверьте:
+
+```bash
+lsblk
+df -h /
+```
+
+Корень `/` смонтирован с раздела вроде `/dev/vda1` → писать нужно на **`/dev/vda`** (whole disk), не на раздел.
+
+Пример `lsblk`:
+
+```text
+NAME   MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+vda    252:0    0   20G  0 disk
+└─vda1 252:1    0   20G  0 part /
+```
+
+Здесь: `dd ... of=/dev/vda`
+
+Дополнительно (чтобы не перепутать диск):
+
+```bash
+ls -l /dev/disk/by-id/
+```
+
+Во всех командах ниже **`YOUR_DISK`** — ваше устройство целиком (`/dev/vda`, `/dev/sda`, `/dev/nvme0n1`, …).
 
 ---
 
@@ -114,7 +152,7 @@ add gateway=172.31.1.1
 ```bash
 umount /mnt
 echo u > /proc/sysrq-trigger
-dd if=chr-uefi-fat.raw of=/dev/sda bs=4M oflag=sync
+dd if=chr-uefi-fat.raw of=YOUR_DISK bs=4M oflag=sync
 echo 1 > /proc/sys/kernel/sysrq
 echo b > /proc/sysrq-trigger
 ```
@@ -150,7 +188,7 @@ nano /mnt/rw/autorun.scr
 ```bash
 umount /mnt
 echo u > /proc/sysrq-trigger
-dd if=chr-7.16.1.img of=/dev/sda bs=4M oflag=sync
+dd if=chr-7.16.1.img of=YOUR_DISK bs=4M oflag=sync
 echo 1 > /proc/sys/kernel/sysrq
 echo b > /proc/sysrq-trigger
 ```
@@ -250,8 +288,8 @@ set winbox address=YOUR_LAN_SUBNET,YOUR_OFFICE_IP/32
 | Проблема | Что проверить |
 |----------|----------------|
 | После reboot нет сети | `autorun.scr`: верные `YOUR_PUBLIC_IP/32` и `YOUR_GATEWAY`; имя интерфейса `eth0` |
+| VPS не грузится после dd | Неверный `YOUR_DISK` или UEFI/Legacy — `lsblk` перед dd; другой образ |
 | Не монтируется образ | Пересчитать `offset` через `fdisk -lu` |
-| VPS не грузится (UEFI/Legacy) | Попробовать другой режим образа (UEFI ↔ Legacy) |
 | Winbox не подключается | Firewall провайдера, порт 8291; временно `/ip service set winbox disabled=no` |
 
 ---
@@ -264,7 +302,7 @@ Guide for installing **Cloud Hosted Router (CHR)** on a VPS with Linux (Debian/U
 
 Works when the provider gives you **eth0**, a static public IP, and a default gateway.
 
-> **Warning:** `dd` overwrites the disk (`/dev/sda`). Confirm server and disk before running.
+> **Warning:** `dd` overwrites the **entire system disk** (see below how to identify it). Confirm server and device before running.
 
 ---
 
@@ -319,6 +357,44 @@ default via YOUR_GATEWAY dev eth0
 | `YOUR_GATEWAY` | `ip r` → default via | `172.31.1.1` |
 | `eth0` | interface name in rescue | usually `eth0` |
 
+### Find the system disk (not always `/dev/sda`!)
+
+Device name **depends on provider and hypervisor**:
+
+| Device | Common on |
+|--------|-----------|
+| `/dev/sda` | Classic VPS, some KVM |
+| `/dev/vda` | VirtIO (KVM, Proxmox, many clouds) |
+| `/dev/nvme0n1` | NVMe disks |
+| `/dev/xvda` | Legacy Xen |
+
+Before `dd`, **always** check:
+
+```bash
+lsblk
+df -h /
+```
+
+If `/` is on `/dev/vda1`, write to **`/dev/vda`** (whole disk), not the partition.
+
+Example `lsblk`:
+
+```text
+NAME   MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+vda    252:0    0   20G  0 disk
+└─vda1 252:1    0   20G  0 part /
+```
+
+Here: `dd ... of=/dev/vda`
+
+Optional:
+
+```bash
+ls -l /dev/disk/by-id/
+```
+
+In all commands below, **`YOUR_DISK`** is the whole device (`/dev/vda`, `/dev/sda`, `/dev/nvme0n1`, …).
+
 ---
 
 ## UEFI (recommended for modern VPS)
@@ -365,7 +441,7 @@ add gateway=YOUR_GATEWAY
 ```bash
 umount /mnt
 echo u > /proc/sysrq-trigger
-dd if=chr-uefi-fat.raw of=/dev/sda bs=4M oflag=sync
+dd if=chr-uefi-fat.raw of=YOUR_DISK bs=4M oflag=sync
 echo 1 > /proc/sys/kernel/sysrq
 echo b > /proc/sysrq-trigger
 ```
@@ -401,7 +477,7 @@ Same `autorun.scr` as in the UEFI section.
 ```bash
 umount /mnt
 echo u > /proc/sysrq-trigger
-dd if=chr-7.16.1.img of=/dev/sda bs=4M oflag=sync
+dd if=chr-7.16.1.img of=YOUR_DISK bs=4M oflag=sync
 echo 1 > /proc/sys/kernel/sysrq
 echo b > /proc/sysrq-trigger
 ```
@@ -493,8 +569,8 @@ Log-based brute-force ban — see [CHR_MIKROTIK_FAIL2BAN.md](./CHR_MIKROTIK_FAIL
 | Issue | Check |
 |-------|--------|
 | No network after reboot | `autorun.scr`: correct IP/gateway; interface `eth0` |
+| VPS won't boot after dd | Wrong `YOUR_DISK` or UEFI/Legacy — run `lsblk` before dd; try other image |
 | Mount fails | Recalculate `offset` with `fdisk -lu` |
-| VPS won't boot | Try the other image type (UEFI ↔ Legacy) |
 | Winbox won't connect | Provider firewall, port 8291 |
 
 ---
