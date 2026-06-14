@@ -639,7 +639,8 @@ set ssh address=YOUR_LAN_SUBNET,YOUR_OFFICE_IP/32
 set winbox address=YOUR_LAN_SUBNET,YOUR_OFFICE_IP/32
 ```
 
-Log-based brute-force ban — see [CHR_MIKROTIK_FAIL2BAN](./mikrotik-fail2ban).
+Log-based brute-force ban — see [CHR_MIKROTIK_FAIL2BAN](https://github.com/helloworld401/mikrotik-fail2ban).
+
 
 ---
 
