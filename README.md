@@ -1,10 +1,35 @@
 # Установка MikroTik CHR на VPS (UEFI и Legacy)
 
-Инструкция для установки **Cloud Hosted Router (CHR)** на любой VPS/облачный сервер через rescue/recovery (Debian/Ubuntu и аналоги).
+Инструкция для установки **Cloud Hosted Router (CHR)** на VPS/облачный сервер с Linux (Debian/Ubuntu и аналоги).
 
 Подходит, если провайдер отдаёт сервер с **eth0**, статическим публичным IP и шлюзом по умолчанию.
 
 > **Внимание:** команды `dd` перезаписывают диск (`/dev/sda`). Убедитесь, что работаете на нужном сервере и с нужным диском.
+
+---
+
+## Нужен ли recovery mode?
+
+**Не обязательно** — но нужна **Linux-среда с доступом к диску**, откуда вы запускаете `wget`, `mount` и `dd`.
+
+| Способ | Суть |
+|--------|------|
+| **Recovery/rescue у провайдера** | Рекомендуется: диск не занят рабочей системой, меньше риска |
+| **Обычный SSH в Linux на VPS** | **Тоже работает** — те же команды; вы сознательно затираете текущую ОС и после `dd` делаете reboot |
+| **Marketplace / готовый образ** | У части хостеров CHR ставится из панели — без `dd` вручную |
+| **Загрузка с ISO** | Если провайдер даёт boot from ISO — можно загрузить образ CHR напрямую |
+
+### SSH без recovery — когда это ок
+
+Если VPS уже под Linux и вы **всё равно его перезаписываете**, можно просто зайти по SSH и выполнить шаги ниже **без** переключения в rescue mode провайдера. Многие так и делают.
+
+Ограничения:
+
+- Корневая файловая система в этот момент **смонтирована с того же диска**, который затираете — теоретически рискованнее, чем rescue; на практике для «одноразовой переустановки» обычно проходит нормально.
+- После `dd` **обязательно reboot** — старая ОС больше не загрузится.
+- Rescue удобнее, если на диске **важные данные** или несколько разделов — там проще не ошибиться.
+
+**Итого:** recovery mode — не единственный путь; это **самый аккуратный**. Для чистого VPS «под ключ под CHR» достаточно обычного SSH в Linux.
 
 ---
 
@@ -132,13 +157,33 @@ echo b > /proc/sysrq-trigger
 
 ---
 
-## Первый вход и лицензия
+## Первый вход, обновление прошивки и лицензия
 
 1. Подключитесь по **Winbox** или **SSH** на `YOUR_PUBLIC_IP`.
 2. Логин по умолчанию: **`admin`**, пароль — **пустой** (сразу смените).
-3. Откройте **System → License**.
+
+### Обновить RouterOS до последней версии (до активации лицензии!)
+
+Сразу после первого входа, **пока лицензия ещё не активирована**, обновите прошивку:
+
+**Winbox → Quick Set** → кнопка **Check for updates** → установить последнюю доступную версию → дождаться перезагрузки.
+
+Альтернатива через CLI:
+
+```routeros
+/system package update
+set channel=stable
+check-for-updates once
+# если status: New version is available:
+/system package update
+install
+```
+
+> **Важно:** обновление делайте **до** trial P1/P10. После активации лицензии на CHR **upgrade прошивки больше недоступен** — останетесь на той версии, которая стоит в момент активации.
 
 ### Активация trial P1 / P10
+
+3. Откройте **System → License**.
 
 В разделе лицензии введите **свои** учётные данные аккаунта MikroTik (создайте на [mikrotik.com](https://mikrotik.com) если нет):
 
@@ -153,7 +198,7 @@ echo b > /proc/sysrq-trigger
 
 - После окончания trial **лицензия сохраняется на этом CHR** и продолжает работать **без ограничения по времени** для уже активированного уровня (P1/P10).
 - Это практичный способ получить полноценный CHR на своём VPS без покупки perpetual license — условно «MikroTik для тех, кто поднимает свой роутер на VPS».
-- **Ограничение:** на таком CHR **нельзя обновлять RouterOS** через стандартный upgrade — прошивка остаётся на версии образа, с которым установили. Для home/lab/edge-router с фиксированной версией это обычно приемлемо.
+- **Ограничение:** после активации trial на таком CHR **нельзя обновлять RouterOS** — прошивка фиксируется на версии, которая была **на момент активации лицензии**. Поэтому сначала **Check for updates**, потом **Start trial**.
 
 > Не публикуйте и не коммитьте в git свои логин/пароль MikroTik — только в Winbox/CLI на роутере.
 
@@ -215,11 +260,36 @@ set winbox address=YOUR_LAN_SUBNET,YOUR_OFFICE_IP/32
 
 # Installing MikroTik CHR on a VPS (UEFI and Legacy)
 
-Guide for installing **Cloud Hosted Router (CHR)** on any VPS/cloud server via rescue/recovery (Debian/Ubuntu, etc.).
+Guide for installing **Cloud Hosted Router (CHR)** on a VPS with Linux (Debian/Ubuntu, etc.).
 
 Works when the provider gives you **eth0**, a static public IP, and a default gateway.
 
 > **Warning:** `dd` overwrites the disk (`/dev/sda`). Confirm server and disk before running.
+
+---
+
+## Do you need recovery mode?
+
+**Not strictly** — you need a **Linux environment with disk access** to run `wget`, `mount`, and `dd`.
+
+| Method | Notes |
+|--------|--------|
+| **Provider rescue/recovery** | Recommended: disk not used by a live root FS, lower risk |
+| **Regular SSH into Linux VPS** | **Works too** — same commands; you intentionally wipe the current OS and reboot after `dd` |
+| **Marketplace / ready-made image** | Some hosts offer one-click CHR — no manual `dd` |
+| **Boot from ISO** | If the provider supports ISO boot — load CHR image directly |
+
+### SSH without recovery — when it’s fine
+
+If the VPS already runs Linux and you **plan to replace it entirely**, SSH in and run the steps below **without** switching to provider rescue. Many people do this.
+
+Caveats:
+
+- Root filesystem is **mounted from the same disk** you overwrite — theoretically riskier than rescue; in practice fine for a one-shot reinstall.
+- **Reboot is mandatory** after `dd` — the old OS will not boot again.
+- Rescue is safer when the disk has **data you care about** or multiple partitions.
+
+**Bottom line:** recovery mode is not the only way — it’s the **cleanest**. For a fresh VPS dedicated to CHR, plain SSH into Linux is enough.
 
 ---
 
@@ -338,13 +408,33 @@ echo b > /proc/sysrq-trigger
 
 ---
 
-## First login and license
+## First login, firmware update, and license
 
 1. Connect via **Winbox** or **SSH** to `YOUR_PUBLIC_IP`.
 2. Default login: **`admin`**, password **empty** (change immediately).
-3. Open **System → License**.
+
+### Update RouterOS to the latest version (before license activation!)
+
+Right after first login, **before activating the license**, update firmware:
+
+**Winbox → Quick Set** → **Check for updates** → install the latest available version → wait for reboot.
+
+CLI alternative:
+
+```routeros
+/system package update
+set channel=stable
+check-for-updates once
+# if status: New version is available:
+/system package update
+install
+```
+
+> **Important:** update **before** starting P1/P10 trial. After license activation, **firmware upgrade is no longer available** on this CHR — you stay on whatever version was installed at activation time.
 
 ### P1 / P10 trial activation
+
+3. Open **System → License**.
 
 Enter **your** MikroTik account credentials ([mikrotik.com](https://mikrotik.com)):
 
@@ -359,7 +449,7 @@ Click **Start trial** and choose **P1** or **P10**.
 
 - After the trial ends, the **license remains on this CHR** and keeps working **without a time limit** for the activated tier (P1/P10).
 - Practical way to run a full CHR on your own VPS without buying a perpetual license.
-- **Limitation:** you **cannot upgrade RouterOS** on this CHR via normal upgrade — firmware stays at the install image version. Usually fine for a fixed-version edge router.
+- **Limitation:** after trial activation you **cannot upgrade RouterOS** — firmware is locked to the version that was running **at license activation**. Run **Check for updates** first, then **Start trial**.
 
 > Never commit or publish your MikroTik login/password — enter only in Winbox on the router.
 
