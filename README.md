@@ -314,7 +314,7 @@ set ssh address=YOUR_LAN_SUBNET,YOUR_OFFICE_IP/32
 set winbox address=YOUR_LAN_SUBNET,YOUR_OFFICE_IP/32
 ```
 
-Защита от брутфорса по логам — см. [CHR_MIKROTIK_FAIL2BAN.md](./CHR_MIKROTIK_FAIL2BAN.md).
+Защита от брутфорса по логам — см. [CHR_MIKROTIK_FAIL2BAN](./mikrotik-fail2ban).
 
 ---
 
@@ -639,7 +639,7 @@ set ssh address=YOUR_LAN_SUBNET,YOUR_OFFICE_IP/32
 set winbox address=YOUR_LAN_SUBNET,YOUR_OFFICE_IP/32
 ```
 
-Log-based brute-force ban — see [CHR_MIKROTIK_FAIL2BAN.md](./CHR_MIKROTIK_FAIL2BAN.md).
+Log-based brute-force ban — see [CHR_MIKROTIK_FAIL2BAN](./mikrotik-fail2ban).
 
 ---
 
